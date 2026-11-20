@@ -1,0 +1,1534 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Class Meet Voting — Panitia OSIM</title>
+    
+    <!-- Google Fonts: Fraunces / Outfit & Plus Jakarta Sans untuk nuansa buletin/poster sekolah modern -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome untuk Ikonografi Cabang Lomba & UI -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <!-- SheetJS (xlsx) untuk Export ke Excel Asli (.xlsx) -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    
+    <!-- Canvas Confetti untuk perayaan saat suara masuk -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                        display: ['"Outfit"', 'sans-serif'],
+                    },
+                    colors: {
+                        paper: {
+                            50: '#FAF7F2',
+                            100: '#F3EDE2',
+                            200: '#E6DCCB',
+                        },
+                        terracotta: {
+                            50: '#FDF4F2',
+                            100: '#FBE6E1',
+                            500: '#D95D39',
+                            600: '#C24A27',
+                            700: '#9E3A1D',
+                        },
+                        emerald: {
+                            50: '#ECFDF5',
+                            100: '#D1FAE5',
+                            500: '#10B981',
+                            600: '#059669',
+                            700: '#047857',
+                            800: '#065F46',
+                            900: '#064E3B',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #FAF7F2;
+            color: #1C1917;
+            /* Tekstur kertas titik halus khas buletin OSIM */
+            background-image: radial-gradient(#D6CFC2 0.85px, transparent 0.85px);
+            background-size: 20px 20px;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #F3EDE2;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #C7BFA9;
+            border-radius: 99px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #A39A84;
+        }
+
+        /* Kartu Pilihan Lomba Bergaya Tiket Suara */
+        .lomba-card {
+            transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+            box-shadow: 0 3px 0 #E6DCCB;
+        }
+        .lomba-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 0 #D6C9B4;
+        }
+        .lomba-card.selected {
+            border-color: #059669;
+            background-color: #ECFDF5;
+            box-shadow: 0 5px 0 #065F46;
+            transform: translateY(-2px);
+        }
+        .lomba-card.selected .check-badge {
+            transform: scale(1) rotate(0deg);
+            opacity: 1;
+        }
+        .check-badge {
+            transform: scale(0.4) rotate(-20deg);
+            opacity: 0;
+            transition: all 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        /* Animasi Halus */
+        @keyframes fadeSlideUp {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .animate-panel {
+            animation: fadeSlideUp 0.32s ease-out forwards;
+        }
+
+        /* Gaya Stempel & Tombol Taktil Poster Acara */
+        .osim-stamp {
+            box-shadow: 3px 3px 0px #1C1917;
+        }
+        .btn-poster {
+            transition: all 0.14s ease;
+            box-shadow: 0 4px 0 #1C1917;
+        }
+        .btn-poster:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 5px 0 #1C1917;
+        }
+        .btn-poster:active:not(:disabled) {
+            transform: translateY(3px);
+            box-shadow: 0 1px 0 #1C1917;
+        }
+
+        /* Perforasi Tiket Bukti Suara */
+        .ticket-divider {
+            background-image: linear-gradient(to right, #CBD5E1 50%, rgba(255,255,255,0) 0%);
+            background-position: bottom;
+            background-size: 12px 2px;
+            background-repeat: repeat-x;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased selection:bg-terracotta-100 selection:text-terracotta-700">
+
+    <!-- Toast Notification Container (Pengganti alert browser) -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
+
+    <!-- Header / Navbar Utama -->
+    <header class="sticky top-0 z-40 bg-paper-50/95 backdrop-blur-md border-b-2 border-stone-900/10">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3">
+            <!-- Brand & Identitas OSIM -->
+            <div class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-2xl bg-terracotta-500 text-white flex items-center justify-center font-display font-extrabold text-xl osim-stamp border-2 border-stone-900">
+                    <i class="fa-solid fa-trophy"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="font-display font-black text-lg sm:text-xl text-stone-900 tracking-tight leading-none">
+                            Class Meet Voting
+                        </h1>
+                        <span class="px-2.5 py-0.5 text-[11px] font-extrabold uppercase tracking-wider bg-emerald-100 text-emerald-900 border border-emerald-700/30 rounded-full">
+                            OSIM
+                        </span>
+                    </div>
+                    <p class="text-xs text-stone-600 mt-1 flex items-center gap-1.5 font-medium">
+                        <span class="relative flex h-2 w-2">
+                            <span id="live-ping" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
+                            <span id="live-dot" class="relative inline-flex rounded-full h-2 w-2 bg-emerald-600"></span>
+                        </span>
+                        <span id="connection-status">LIVE • <strong id="header-live-count" class="text-stone-900">0</strong> suara masuk</span>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Navigasi 2 Bagian Utama: Voting Siswa & Panel Admin -->
+            <nav class="flex items-center bg-paper-100 p-1.5 rounded-2xl border border-stone-300/80 w-full sm:w-auto">
+                <button id="nav-voting" onclick="switchTab('voting')" class="flex-1 sm:flex-initial px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 bg-emerald-700 text-white shadow-xs cursor-pointer">
+                    <i class="fa-solid fa-check-to-slot"></i>
+                    <span>Voting Siswa</span>
+                </button>
+                <button id="nav-admin" onclick="switchTab('admin')" class="flex-1 sm:flex-initial px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 text-stone-600 hover:text-stone-900 cursor-pointer">
+                    <i id="admin-lock-icon" class="fa-solid fa-lock text-xs"></i>
+                    <span>Panel Admin</span>
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- KONTEN UTAMA -->
+    <main class="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-9">
+
+        <!-- ========================================================= -->
+        <!-- BAGIAN 1: HALAMAN VOTING SISWA                            -->
+        <!-- ========================================================= -->
+        <section id="section-voting" class="animate-panel">
+            <!-- Hero Banner Bergaya Buletin Acara Madrasah -->
+            <div class="bg-emerald-900 rounded-3xl p-6 sm:p-8 text-white mb-8 relative overflow-hidden border-2 border-stone-900 shadow-[6px_6px_0px_#1C1917]">
+                <div class="absolute -right-8 -bottom-10 opacity-10 text-[155px] pointer-events-none rotate-12">
+                    <i class="fa-solid fa-medal"></i>
+                </div>
+                <div class="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                    <div class="max-w-2xl">
+                        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-terracotta-500 text-white text-xs font-bold uppercase tracking-wider mb-3 border border-stone-900">
+                            <span class="w-2 h-2 rounded-full bg-white animate-pulse"></span>
+                            <span>Jajak Pendapat Resmi OSIM</span>
+                        </div>
+                        <h2 class="font-display font-black text-2xl sm:text-4xl tracking-tight mb-2 leading-tight">
+                            Tentukan Lomba Paling Seru di Class Meeting!
+                        </h2>
+                        <p class="text-emerald-100/90 text-sm sm:text-base leading-relaxed">
+                            Aspirasi kamu menentukan cabang lomba yang akan digelar panitia <strong>OSIM</strong>. Tulis nama lengkap, pilih kelasmu (7A–9K), lalu klik <strong>1 cabang lomba</strong> paling favorit!
+                        </p>
+                    </div>
+
+                    <!-- Live Ticker Counter Box -->
+                    <div class="bg-paper-50 text-stone-900 rounded-2xl p-4 sm:p-5 border-2 border-stone-900 osim-stamp shrink-0 min-w-[200px]">
+                        <div class="flex items-center justify-between gap-2 mb-1">
+                            <span class="text-[11px] font-extrabold uppercase tracking-wider text-terracotta-600 flex items-center gap-1.5">
+                                <span class="w-2 h-2 rounded-full bg-terracotta-500 animate-ping"></span>
+                                LIVE PARTISIPASI
+                            </span>
+                            <i class="fa-solid fa-users text-emerald-700 text-sm"></i>
+                        </div>
+                        <div class="flex items-baseline gap-1.5">
+                            <span id="hero-live-count" class="font-display font-black text-3xl sm:text-4xl text-stone-900">0</span>
+                            <span class="text-xs font-bold text-stone-500">Siswa Memilih</span>
+                        </div>
+                        <p id="hero-latest-voter" class="text-[11px] text-stone-500 mt-1.5 truncate max-w-[210px]">
+                            Menunggu suara masuk...
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tiket Bukti Sudah Voting (Muncul jika siswa sudah mengirim suara) -->
+            <div id="vote-receipt-card" class="hidden bg-white rounded-3xl border-2 border-stone-900 shadow-[6px_6px_0px_#059669] mb-8 max-w-lg mx-auto overflow-hidden animate-panel">
+                <div class="bg-emerald-700 text-white px-6 py-4 flex items-center justify-between border-b-2 border-stone-900">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-ticket text-amber-300 text-lg"></i>
+                        <span class="font-display font-extrabold tracking-wide text-sm uppercase">Kartu Bukti Suara • OSIM</span>
+                    </div>
+                    <span class="px-2.5 py-0.5 rounded-full bg-white text-emerald-900 text-[11px] font-extrabold">SAH & TERCATAT</span>
+                </div>
+
+                <div class="p-6 sm:p-7 text-center">
+                    <div class="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 border-2 border-emerald-700 flex items-center justify-center text-2xl mx-auto mb-3">
+                        <i class="fa-solid fa-circle-check"></i>
+                    </div>
+                    <h3 class="font-display font-black text-2xl text-stone-900">
+                        Terima Kasih, <span id="receipt-name" class="text-emerald-700">Siswa</span>!
+                    </h3>
+                    <p class="text-sm text-stone-600 mt-1">
+                        Perwakilan Kelas <strong id="receipt-class" class="text-stone-900 px-2 py-0.5 bg-paper-100 rounded-md border border-stone-300">7A</strong>
+                    </p>
+                    <p class="text-xs text-stone-400 mt-1.5">Tercatat pada <span id="receipt-time">-</span></p>
+
+                    <div class="my-5 py-3 ticket-divider"></div>
+
+                    <div class="bg-paper-50 rounded-2xl p-4 border-2 border-dashed border-stone-300 mb-6">
+                        <p class="text-[11px] font-extrabold text-stone-400 uppercase tracking-wider mb-1.5">Cabang Lomba Pilihanmu</p>
+                        <div id="receipt-choice-box" class="font-display font-black text-xl text-terracotta-600 flex items-center justify-center gap-2">
+                            <!-- Nama Lomba Terpilih -->
+                        </div>
+                    </div>
+
+                    <button onclick="resetStudentFormForNewPerson()" class="w-full sm:w-auto px-6 py-3 rounded-2xl bg-stone-900 hover:bg-stone-800 text-white font-bold text-sm transition-all inline-flex items-center justify-center gap-2 cursor-pointer">
+                        <i class="fa-solid fa-user-plus"></i>
+                        <span>Isi Voting untuk Teman Lain</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Form Voting Utama -->
+            <form id="voting-form" onsubmit="handleVoteSubmit(event)" class="space-y-7">
+                <!-- Langkah 1: Identitas Siswa -->
+                <div class="bg-white rounded-3xl p-5 sm:p-7 border-2 border-stone-200 shadow-xs">
+                    <div class="flex items-center gap-3 mb-5">
+                        <span class="w-9 h-9 rounded-xl bg-terracotta-500 text-white font-display font-black flex items-center justify-center text-base border-2 border-stone-900 osim-stamp">1</span>
+                        <div>
+                            <h3 class="font-display font-extrabold text-lg text-stone-900">Identitas Pemilih</h3>
+                            <p class="text-xs text-stone-500">Masukkan nama lengkap dan pilih kelas kamu dengan benar</p>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-5">
+                        <!-- Input Nama -->
+                        <div class="md:col-span-7">
+                            <label for="voter-name" class="block text-sm font-bold text-stone-800 mb-1.5">
+                                Nama Lengkap Siswa <span class="text-terracotta-600">*</span>
+                            </label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-stone-400">
+                                    <i class="fa-solid fa-user"></i>
+                                </span>
+                                <input type="text" id="voter-name" required maxlength="60"
+                                    placeholder="Contoh: Muhammad Rayyan"
+                                    class="w-full pl-10 pr-4 py-3 rounded-2xl bg-paper-50 border-2 border-stone-300 text-stone-900 placeholder-stone-400 focus:outline-none focus:border-emerald-600 focus:bg-white transition-all text-sm sm:text-base font-semibold">
+                            </div>
+                        </div>
+
+                        <!-- Pilih Kelas (7A-7L, 8A-8K, 9A-9K) -->
+                        <div class="md:col-span-5">
+                            <label for="voter-class" class="block text-sm font-bold text-stone-800 mb-1.5">
+                                Kelas <span class="text-terracotta-600">*</span>
+                            </label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-stone-400 pointer-events-none">
+                                    <i class="fa-solid fa-graduation-cap"></i>
+                                </span>
+                                <select id="voter-class" required
+                                    class="w-full pl-10 pr-10 py-3 rounded-2xl bg-paper-50 border-2 border-stone-300 text-stone-900 focus:outline-none focus:border-emerald-600 focus:bg-white transition-all text-sm sm:text-base font-bold appearance-none cursor-pointer">
+                                    <option value="" disabled selected>-- Pilih Kelas Kamu --</option>
+                                    <optgroup label="Kelas 7 (7A - 7L)">
+                                        <option value="7A">7A</option>
+                                        <option value="7B">7B</option>
+                                        <option value="7C">7C</option>
+                                        <option value="7D">7D</option>
+                                        <option value="7E">7E</option>
+                                        <option value="7F">7F</option>
+                                        <option value="7G">7G</option>
+                                        <option value="7H">7H</option>
+                                        <option value="7I">7I</option>
+                                        <option value="7J">7J</option>
+                                        <option value="7K">7K</option>
+                                        <option value="7L">7L</option>
+                                    </optgroup>
+                                    <optgroup label="Kelas 8 (8A - 8K)">
+                                        <option value="8A">8A</option>
+                                        <option value="8B">8B</option>
+                                        <option value="8C">8C</option>
+                                        <option value="8D">8D</option>
+                                        <option value="8E">8E</option>
+                                        <option value="8F">8F</option>
+                                        <option value="8G">8G</option>
+                                        <option value="8H">8H</option>
+                                        <option value="8I">8I</option>
+                                        <option value="8J">8J</option>
+                                        <option value="8K">8K</option>
+                                    </optgroup>
+                                    <optgroup label="Kelas 9 (9A - 9K)">
+                                        <option value="9A">9A</option>
+                                        <option value="9B">9B</option>
+                                        <option value="9C">9C</option>
+                                        <option value="9D">9D</option>
+                                        <option value="9E">9E</option>
+                                        <option value="9F">9F</option>
+                                        <option value="9G">9G</option>
+                                        <option value="9H">9H</option>
+                                        <option value="9I">9I</option>
+                                        <option value="9J">9J</option>
+                                        <option value="9K">9K</option>
+                                    </optgroup>
+                                </select>
+                                <span class="absolute inset-y-0 right-0 pr-3.5 flex items-center text-stone-500 pointer-events-none">
+                                    <i class="fa-solid fa-chevron-down text-xs"></i>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Langkah 2: Pilih Cabang Lomba (1 Lomba Favorit) -->
+                <div class="bg-white rounded-3xl p-5 sm:p-7 border-2 border-stone-200 shadow-xs">
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-5">
+                        <div class="flex items-center gap-3">
+                            <span class="w-9 h-9 rounded-xl bg-terracotta-500 text-white font-display font-black flex items-center justify-center text-base border-2 border-stone-900 osim-stamp">2</span>
+                            <div>
+                                <h3 class="font-display font-extrabold text-lg text-stone-900">Pilih 1 Cabang Lomba</h3>
+                                <p class="text-xs text-stone-500">Klik pada kartu lomba di bawah untuk menentukan pilihanmu</p>
+                            </div>
+                        </div>
+                        <span id="selected-status-pill" class="px-3.5 py-1.5 rounded-full bg-paper-100 border border-stone-300 text-xs font-extrabold text-stone-600">
+                            Belum ada lomba dipilih
+                        </span>
+                    </div>
+
+                    <!-- Grid Kartu Lomba (Dirender live dari Firebase) -->
+                    <div id="student-competitions-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div class="col-span-full py-12 text-center text-stone-400">
+                            <i class="fa-solid fa-spinner fa-spin text-2xl mb-2 text-emerald-700"></i>
+                            <p class="text-sm font-semibold">Memuat daftar cabang lomba dari panitia OSIM...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tombol Kirim Suara -->
+                <div class="flex flex-col sm:flex-row items-center justify-between gap-4 bg-paper-100 p-5 rounded-3xl border-2 border-stone-300">
+                    <div class="flex items-center gap-3 text-xs sm:text-sm text-stone-700 font-medium">
+                        <div class="w-9 h-9 rounded-xl bg-white border border-stone-300 flex items-center justify-center text-emerald-700 shrink-0">
+                            <i class="fa-solid fa-shield-halved text-base"></i>
+                        </div>
+                        <span>Setiap nama & kelas hanya berhak memberikan <strong>1 suara sah</strong>.</span>
+                    </div>
+                    <button type="submit" id="submit-vote-btn" class="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-display font-extrabold text-base btn-poster border-2 border-stone-900 flex items-center justify-center gap-2.5 cursor-pointer">
+                        <i class="fa-solid fa-paper-plane"></i>
+                        <span>Kirim Suara Sekarang</span>
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- BAGIAN 2: PANEL ADMIN (PASSWORD: 20583788)                -->
+        <!-- ========================================================= -->
+        <section id="section-admin" class="hidden animate-panel">
+            
+            <!-- Layar Kunci Password Admin -->
+            <div id="admin-lock-screen" class="max-w-md mx-auto my-6 sm:my-12 bg-white rounded-3xl p-7 sm:p-9 border-2 border-stone-900 shadow-[6px_6px_0px_#1C1917] text-center">
+                <div class="w-16 h-16 rounded-2xl bg-terracotta-100 text-terracotta-600 border-2 border-stone-900 osim-stamp flex items-center justify-center text-2xl mx-auto mb-5">
+                    <i class="fa-solid fa-key"></i>
+                </div>
+                <span class="px-3 py-1 rounded-full bg-paper-100 border border-stone-300 text-stone-700 text-[11px] font-extrabold uppercase tracking-wider">
+                    Khusus Panitia OSIM
+                </span>
+                <h2 class="font-display font-black text-2xl text-stone-900 mt-2.5 mb-1.5">
+                    Masuk Panel Admin
+                </h2>
+                <p class="text-sm text-stone-500 mb-6">
+                    Masukkan kode akses panitia untuk memantau perolehan suara live, mengatur cabang lomba, dan mengunduh rekap Excel.
+                </p>
+
+                <form onsubmit="handleAdminLogin(event)" class="space-y-4 text-left">
+                    <div>
+                        <label for="admin-password-input" class="block text-xs font-extrabold uppercase tracking-wider text-stone-600 mb-1.5">
+                            Password Admin OSIM
+                        </label>
+                        <div class="relative">
+                            <input type="password" id="admin-password-input" required
+                                placeholder="Masukkan password..."
+                                class="w-full px-4 py-3 pr-11 rounded-2xl bg-paper-50 border-2 border-stone-300 text-stone-900 font-mono text-base focus:outline-none focus:border-emerald-700 focus:bg-white transition-all">
+                            <button type="button" onclick="togglePasswordVisibility()" class="absolute inset-y-0 right-0 pr-3.5 flex items-center text-stone-400 hover:text-stone-700 cursor-pointer">
+                                <i id="eye-icon" class="fa-solid fa-eye"></i>
+                            </button>
+                        </div>
+                        <p id="password-error-msg" class="hidden text-xs text-rose-600 font-bold mt-2 flex items-center gap-1.5">
+                            <i class="fa-solid fa-circle-exclamation"></i>
+                            <span>Password salah! Silakan cek kembali kode panitia OSIM.</span>
+                        </p>
+                    </div>
+
+                    <button type="submit" class="w-full py-3.5 rounded-2xl bg-stone-900 hover:bg-stone-800 text-white font-display font-extrabold text-sm btn-poster border-2 border-stone-900 flex items-center justify-center gap-2 cursor-pointer">
+                        <i class="fa-solid fa-unlock-keyhole"></i>
+                        <span>Buka Dashboard Panitia</span>
+                    </button>
+                </form>
+            </div>
+
+            <!-- Konten Dashboard Admin (Muncul setelah password 20583788 terverifikasi) -->
+            <div id="admin-dashboard-content" class="hidden space-y-6">
+                
+                <!-- Bar Atas Admin: Judul, Export Excel & Logout -->
+                <div class="bg-white rounded-3xl p-5 sm:p-6 border-2 border-stone-200 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 text-xs font-extrabold">
+                                <i class="fa-solid fa-circle text-[8px] mr-1 animate-pulse text-emerald-600"></i> LIVE CLOUD SYNC
+                            </span>
+                            <span class="text-xs text-stone-500 font-semibold">Panitia Class Meeting OSIM</span>
+                        </div>
+                        <h2 class="font-display font-black text-2xl text-stone-900 mt-1">
+                            Rekapitulasi Voting & Manajemen Lomba
+                        </h2>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2.5">
+                        <button onclick="exportToExcel()" class="px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm btn-poster border-2 border-stone-900 flex items-center gap-2 cursor-pointer">
+                            <i class="fa-solid fa-file-excel"></i>
+                            <span>Download Excel (.xlsx)</span>
+                        </button>
+                        <button onclick="logoutAdmin()" class="px-4 py-2.5 rounded-xl bg-paper-100 hover:bg-paper-200 text-stone-800 border border-stone-300 font-bold text-sm transition-all flex items-center gap-2 cursor-pointer">
+                            <i class="fa-solid fa-right-from-bracket"></i>
+                            <span>Keluar / Kunci</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Ringkasan Statistik Cepat (4 Kartu) -->
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+                    <div class="bg-white rounded-2xl p-4 sm:p-5 border-2 border-stone-200">
+                        <div class="flex items-center justify-between text-stone-500 mb-2">
+                            <span class="text-xs font-extrabold uppercase tracking-wider">Total Suara Masuk</span>
+                            <i class="fa-solid fa-users text-emerald-700 bg-emerald-50 p-2 rounded-lg border border-emerald-200"></i>
+                        </div>
+                        <p id="stat-total-voters" class="font-display font-black text-2xl sm:text-3xl text-stone-900">0</p>
+                        <p class="text-xs text-stone-500 mt-1 font-medium">Siswa telah memilih</p>
+                    </div>
+
+                    <div class="bg-white rounded-2xl p-4 sm:p-5 border-2 border-stone-200">
+                        <div class="flex items-center justify-between text-stone-500 mb-2">
+                            <span class="text-xs font-extrabold uppercase tracking-wider">Cabang Lomba</span>
+                            <i class="fa-solid fa-list-check text-terracotta-600 bg-terracotta-50 p-2 rounded-lg border border-terracotta-200"></i>
+                        </div>
+                        <p id="stat-total-comps" class="font-display font-black text-2xl sm:text-3xl text-stone-900">0</p>
+                        <p class="text-xs text-stone-500 mt-1 font-medium">Lomba aktif di halaman siswa</p>
+                    </div>
+
+                    <div class="bg-white rounded-2xl p-4 sm:p-5 border-2 border-stone-200">
+                        <div class="flex items-center justify-between text-stone-500 mb-2">
+                            <span class="text-xs font-extrabold uppercase tracking-wider">Kelas Teraktif</span>
+                            <i class="fa-solid fa-school text-amber-600 bg-amber-50 p-2 rounded-lg border border-amber-200"></i>
+                        </div>
+                        <p id="stat-top-class" class="font-display font-black text-2xl sm:text-3xl text-stone-900">-</p>
+                        <p id="stat-top-class-count" class="text-xs text-stone-500 mt-1 font-medium">0 pemilih</p>
+                    </div>
+
+                    <div class="bg-white rounded-2xl p-4 sm:p-5 border-2 border-stone-200">
+                        <div class="flex items-center justify-between text-stone-500 mb-2">
+                            <span class="text-xs font-extrabold uppercase tracking-wider">Peringkat #1</span>
+                            <i class="fa-solid fa-crown text-amber-500 bg-amber-50 p-2 rounded-lg border border-amber-200"></i>
+                        </div>
+                        <p id="stat-top-comp" class="font-display font-black text-lg sm:text-xl text-emerald-800 truncate">-</p>
+                        <p id="stat-top-comp-votes" class="text-xs text-stone-500 mt-1 font-medium">0 suara (0%)</p>
+                    </div>
+                </div>
+
+                <!-- Grid Utama Admin: Hasil Perolehan Suara (Kiri) & Kelola Daftar Lomba (Kanan) -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    
+                    <!-- Kolom Kiri (7 Col): Hasil Voting Live & Filter Jenjang -->
+                    <div class="lg:col-span-7 bg-white rounded-3xl p-5 sm:p-6 border-2 border-stone-200 flex flex-col">
+                        <div class="flex flex-wrap items-center justify-between gap-3 mb-5 pb-4 border-b border-stone-200">
+                            <div>
+                                <h3 class="font-display font-extrabold text-lg text-stone-900">Perolehan Suara Live</h3>
+                                <p class="text-xs text-stone-500">Peringkat cabang lomba berdasarkan suara masuk</p>
+                            </div>
+                            <!-- Filter Jenjang -->
+                            <div class="flex items-center gap-1 bg-paper-100 p-1 rounded-xl border border-stone-300 text-xs font-extrabold">
+                                <button onclick="setAdminGradeFilter('ALL')" id="filter-btn-ALL" class="px-2.5 py-1.5 rounded-lg bg-stone-900 text-white transition-all cursor-pointer">Semua</button>
+                                <button onclick="setAdminGradeFilter('7')" id="filter-btn-7" class="px-2.5 py-1.5 rounded-lg text-stone-600 hover:text-stone-900 transition-all cursor-pointer">Kls 7</button>
+                                <button onclick="setAdminGradeFilter('8')" id="filter-btn-8" class="px-2.5 py-1.5 rounded-lg text-stone-600 hover:text-stone-900 transition-all cursor-pointer">Kls 8</button>
+                                <button onclick="setAdminGradeFilter('9')" id="filter-btn-9" class="px-2.5 py-1.5 rounded-lg text-stone-600 hover:text-stone-900 transition-all cursor-pointer">Kls 9</button>
+                            </div>
+                        </div>
+
+                        <!-- Bar Chart Container -->
+                        <div id="admin-results-bars" class="space-y-4 flex-1">
+                            <!-- Diisi otomatis via JS -->
+                        </div>
+                    </div>
+
+                    <!-- Kolom Kanan (5 Col): Kelola Pilihan Lomba (Tambah / Hapus Live) -->
+                    <div class="lg:col-span-5 bg-white rounded-3xl p-5 sm:p-6 border-2 border-stone-200 flex flex-col">
+                        <div class="mb-4 pb-3 border-b border-stone-200">
+                            <h3 class="font-display font-extrabold text-lg text-stone-900">Kelola Cabang Lomba</h3>
+                            <p class="text-xs text-stone-500">Tambah atau hapus lomba (langsung berubah di HP siswa)</p>
+                        </div>
+
+                        <!-- Form Tambah Lomba Baru -->
+                        <form onsubmit="handleAddCompetition(event)" class="bg-paper-50 p-4 rounded-2xl border-2 border-stone-200 mb-5 space-y-3">
+                            <div>
+                                <label class="block text-xs font-extrabold text-stone-700 mb-1">Nama Cabang Lomba Baru</label>
+                                <input type="text" id="new-comp-name" required maxlength="40"
+                                    placeholder="Contoh: Tarik Tambang / Basket 3x3"
+                                    class="w-full px-3.5 py-2 rounded-xl bg-white border border-stone-300 text-sm font-medium focus:outline-none focus:border-emerald-700">
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                <div>
+                                    <label class="block text-xs font-extrabold text-stone-700 mb-1">Ikon Lomba</label>
+                                    <select id="new-comp-icon" class="w-full px-3 py-2 rounded-xl bg-white border border-stone-300 text-sm font-medium focus:outline-none focus:border-emerald-700">
+                                        <option value="fa-trophy">🏆 Piala / Umum</option>
+                                        <option value="fa-gamepad">🎮 E-Sport / Game</option>
+                                        <option value="fa-futbol">⚽ Olahraga Bola</option>
+                                        <option value="fa-person-running">🏃 Atletik / Estafet</option>
+                                        <option value="fa-masks-theater">🎭 Seni / Coswalk</option>
+                                        <option value="fa-brain">🧠 Kuis / Family 100</option>
+                                        <option value="fa-people-group">🤝 Permainan Tim</option>
+                                        <option value="fa-star">⭐ Hiburan / Tradisional</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-extrabold text-stone-700 mb-1">Deskripsi Singkat</label>
+                                    <input type="text" id="new-comp-desc" maxlength="55"
+                                        placeholder="Contoh: Regu 5 orang putra/putri"
+                                        class="w-full px-3 py-2 rounded-xl bg-white border border-stone-300 text-sm font-medium focus:outline-none focus:border-emerald-700">
+                                </div>
+                            </div>
+                            <button type="submit" class="w-full py-2.5 rounded-xl bg-terracotta-500 hover:bg-terracotta-600 text-white font-bold text-xs sm:text-sm border border-stone-900 shadow-[2px_2px_0px_#1C1917] transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                                <i class="fa-solid fa-plus"></i>
+                                <span>Tambah Lomba ke Daftar</span>
+                            </button>
+                        </form>
+
+                        <!-- Daftar Lomba Saat Ini (Bisa Dihapus) -->
+                        <div class="flex-1">
+                            <p class="text-xs font-extrabold uppercase tracking-wider text-stone-400 mb-2.5">Daftar Lomba Aktif:</p>
+                            <div id="admin-competitions-list" class="space-y-2 max-h-[340px] overflow-y-auto pr-1">
+                                <!-- Diisi otomatis via JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabel Riwayat Pemilih Masuk -->
+                <div class="bg-white rounded-3xl p-5 sm:p-6 border-2 border-stone-200">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+                        <div>
+                            <h3 class="font-display font-extrabold text-lg text-stone-900">Riwayat Pemilih Masuk</h3>
+                            <p class="text-xs text-stone-500">Data real-time siswa yang telah memberikan suara</p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <div class="relative">
+                                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 text-xs"></i>
+                                <input type="text" id="search-voter-input" oninput="renderVoterTable()"
+                                    placeholder="Cari nama, kelas, lomba..."
+                                    class="pl-8 pr-3 py-2 rounded-xl bg-paper-50 border border-stone-300 text-xs sm:text-sm focus:outline-none focus:border-emerald-700">
+                            </div>
+                            <button onclick="confirmResetAllVotes()" class="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-bold text-xs transition-colors flex items-center gap-1.5 cursor-pointer">
+                                <i class="fa-solid fa-trash-can"></i>
+                                <span>Reset Voting</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto rounded-2xl border border-stone-200">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-paper-100 text-stone-700 text-xs uppercase tracking-wider border-b border-stone-200">
+                                    <th class="py-3 px-4 font-extrabold">No</th>
+                                    <th class="py-3 px-4 font-extrabold">Waktu Voting</th>
+                                    <th class="py-3 px-4 font-extrabold">Nama Lengkap</th>
+                                    <th class="py-3 px-4 font-extrabold">Kelas</th>
+                                    <th class="py-3 px-4 font-extrabold">Lomba Dipilih</th>
+                                    <th class="py-3 px-4 font-extrabold text-center">Hapus</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-voters-tbody" class="divide-y divide-stone-200/70 text-sm">
+                                <!-- Diisi otomatis via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer Sederhana -->
+    <footer class="border-t border-stone-300/70 bg-paper-100/70 py-5 mt-10">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-stone-600">
+            <p class="font-bold text-stone-800">
+                &copy; 2026 Class Meet Voting — Panitia Pelaksana <span class="text-emerald-800 underline decoration-terracotta-500 decoration-2">OSIM</span>
+            </p>
+            <p>Sistem Jajak Pendapat Class Meeting Real-Time</p>
+        </div>
+    </footer>
+
+    <!-- Modal Konfirmasi Custom (Pengganti confirm() browser) -->
+    <div id="custom-confirm-modal" class="hidden fixed inset-0 z-50 bg-stone-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-sm w-full p-6 border-2 border-stone-900 shadow-[6px_6px_0px_#1C1917] animate-panel">
+            <div class="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 border border-rose-300 flex items-center justify-center text-xl mb-4">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <h4 id="confirm-modal-title" class="font-display font-black text-lg text-stone-900 mb-1">Konfirmasi Tindakan</h4>
+            <p id="confirm-modal-desc" class="text-sm text-stone-600 mb-6">Apakah Anda yakin ingin melanjutkan?</p>
+            <div class="flex items-center justify-end gap-2.5">
+                <button onclick="closeConfirmModal()" class="px-4 py-2 rounded-xl bg-paper-100 hover:bg-paper-200 text-stone-800 font-bold text-sm transition-colors cursor-pointer">
+                    Batal
+                </button>
+                <button id="confirm-modal-yes-btn" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm transition-colors cursor-pointer">
+                    Ya, Lanjutkan
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- LOGIKA APLIKASI & FIREBASE FIRESTORE REAL-TIME            -->
+    <!-- ========================================================= -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, addDoc, deleteDoc, onSnapshot, collection, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Konfigurasi Firebase dari Environment
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'classmeet-osim-default';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+
+        let db = null;
+        let auth = null;
+        let currentUser = null;
+
+        // Daftar 8 Cabang Lomba Awal (Sesuai Ketentuan Wajib)
+        const DEFAULT_COMPETITIONS = [
+            { id: 'comp_esport', name: 'E-sport', icon: 'fa-gamepad', desc: 'Turnamen game kompetitif antar perwakilan kelas', order: 1 },
+            { id: 'comp_estafet', name: 'Estafet', icon: 'fa-person-running', desc: 'Lomba lari & ketangkasan sambung antar tim', order: 2 },
+            { id: 'comp_handball', name: 'Handball', icon: 'fa-volleyball', desc: 'Pertandingan bola tangan beregu penuh strategi', order: 3 },
+            { id: 'comp_family100', name: 'Family 100', icon: 'fa-brain', desc: 'Kuis survei seru adu kekompakan kelas', order: 4 },
+            { id: 'comp_batok', name: 'Batok kelapa', icon: 'fa-shoe-prints', desc: 'Balap egrang batok kelapa tradisional', order: 5 },
+            { id: 'comp_coswalk', name: 'Lomba Coswalk', icon: 'fa-masks-theater', desc: 'Parade kostum kreatif & catwalk karakter', order: 6 },
+            { id: 'comp_mdb', name: 'Mute, deaf, blind', icon: 'fa-ear-deaf', desc: 'Tantangan komunikasi tim penuh keseruan', order: 7 },
+            { id: 'comp_futsal', name: 'Futsal', icon: 'fa-futbol', desc: 'Turnamen futsal kebanggaan tiap kelas', order: 8 }
+        ];
+
+        // State Aplikasi
+        let competitionsList = [];
+        let votesList = [];
+        let selectedCompetitionId = null;
+        let isAdminAuthenticated = false;
+        let adminGradeFilter = 'ALL';
+
+        // Inisialisasi Firebase & Autentikasi
+        async function initFirebase() {
+            if (!firebaseConfig) {
+                showToast('Konfigurasi cloud tidak ditemukan, menjalankan mode tampilan.', 'warning');
+                competitionsList = [...DEFAULT_COMPETITIONS];
+                renderAllViews();
+                return;
+            }
+
+            try {
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                // Wajib autentikasi terlebih dahulu sebelum query Firestore
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        currentUser = user;
+                        await ensureInitialCompetitions();
+                        setupRealtimeListeners();
+                    }
+                });
+            } catch (error) {
+                console.error("Firebase init error:", error);
+                updateConnectionStatus(false);
+                competitionsList = [...DEFAULT_COMPETITIONS];
+                renderAllViews();
+            }
+        }
+
+        // Inisialisasi otomatis 8 lomba default jika database masih kosong
+        async function ensureInitialCompetitions() {
+            if (!db || !currentUser) return;
+            try {
+                const compsRef = collection(db, 'artifacts', appId, 'public', 'data', 'competitions');
+                const snapshot = await getDocs(compsRef);
+                if (snapshot.empty) {
+                    const batch = writeBatch(db);
+                    DEFAULT_COMPETITIONS.forEach((comp) => {
+                        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'competitions', comp.id);
+                        batch.set(docRef, {
+                            name: comp.name,
+                            icon: comp.icon,
+                            desc: comp.desc,
+                            order: comp.order,
+                            createdAt: Date.now()
+                        });
+                    });
+                    await batch.commit();
+                }
+            } catch (err) {
+                console.error("Gagal inisialisasi data lomba awal:", err);
+            }
+        }
+
+        // Listener Real-time (onSnapshot) untuk sinkronisasi live antar perangkat
+        function setupRealtimeListeners() {
+            if (!db || !currentUser) return;
+
+            // 1. Listener Cabang Lomba
+            const compsRef = collection(db, 'artifacts', appId, 'public', 'data', 'competitions');
+            onSnapshot(compsRef, (snapshot) => {
+                const items = [];
+                snapshot.forEach((docSnap) => {
+                    items.push({ id: docSnap.id, ...docSnap.data() });
+                });
+                items.sort((a, b) => (a.order || 99) - (b.order || 99) || (a.createdAt || 0) - (b.createdAt || 0));
+                competitionsList = items;
+
+                // Reset pilihan jika lomba yang dipilih siswa baru saja dihapus admin
+                if (selectedCompetitionId && !items.some(i => i.id === selectedCompetitionId)) {
+                    selectedCompetitionId = null;
+                }
+
+                renderAllViews();
+                updateConnectionStatus(true);
+            }, (error) => {
+                console.error("Error listening competitions:", error);
+                updateConnectionStatus(false);
+            });
+
+            // 2. Listener Suara Masuk (Live Ticker & Admin)
+            const votesRef = collection(db, 'artifacts', appId, 'public', 'data', 'votes');
+            onSnapshot(votesRef, (snapshot) => {
+                const vItems = [];
+                snapshot.forEach((docSnap) => {
+                    vItems.push({ id: docSnap.id, ...docSnap.data() });
+                });
+                vItems.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+                votesList = vItems;
+
+                updateLiveTicker();
+                renderAdminDashboard();
+            }, (error) => {
+                console.error("Error listening votes:", error);
+            });
+        }
+
+        function updateConnectionStatus(isOnline) {
+            const liveDot = document.getElementById('live-dot');
+            const livePing = document.getElementById('live-ping');
+            if (isOnline) {
+                liveDot.className = 'relative inline-flex rounded-full h-2 w-2 bg-emerald-600';
+                livePing.classList.remove('hidden');
+            } else {
+                liveDot.className = 'relative inline-flex rounded-full h-2 w-2 bg-amber-500';
+                livePing.classList.add('hidden');
+            }
+        }
+
+        function updateLiveTicker() {
+            const total = votesList.length;
+            document.getElementById('header-live-count').textContent = total;
+            document.getElementById('hero-live-count').textContent = total;
+
+            const latestEl = document.getElementById('hero-latest-voter');
+            if (total > 0) {
+                const latest = votesList[0];
+                latestEl.innerHTML = `Terbaru: <strong class="text-stone-800">${escapeHtml(latest.studentName)}</strong> (${escapeHtml(latest.studentClass)})`;
+            } else {
+                latestEl.textContent = 'Jadilah pemilih pertama hari ini!';
+            }
+        }
+
+        function renderAllViews() {
+            renderStudentCompetitions();
+            renderAdminDashboard();
+        }
+
+        // =========================================================
+        // RENDER HALAMAN VOTING SISWA
+        // =========================================================
+        function renderStudentCompetitions() {
+            const grid = document.getElementById('student-competitions-grid');
+            updateSelectedPill();
+
+            if (competitionsList.length === 0) {
+                grid.innerHTML = `
+                    <div class="col-span-full py-10 text-center bg-paper-50 rounded-2xl border-2 border-dashed border-stone-300">
+                        <i class="fa-solid fa-folder-open text-3xl text-stone-300 mb-2"></i>
+                        <p class="text-sm font-bold text-stone-600">Belum ada cabang lomba yang dibuka panitia OSIM.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            grid.innerHTML = competitionsList.map((comp) => {
+                const isSelected = selectedCompetitionId === comp.id;
+                const iconClass = comp.icon || 'fa-trophy';
+                const descText = comp.desc || 'Cabang lomba Class Meeting OSIM';
+
+                return `
+                    <div onclick="selectCompetitionChoice('${comp.id}')"
+                         class="lomba-card cursor-pointer relative rounded-2xl p-4 border-2 ${isSelected ? 'selected border-emerald-700 bg-emerald-50' : 'border-stone-300 bg-paper-50 hover:border-stone-900 hover:bg-white'} select-none flex flex-col justify-between">
+                        
+                        <!-- Badge Centang -->
+                        <div class="check-badge absolute top-3 right-3 w-7 h-7 rounded-full bg-emerald-700 text-white border border-stone-900 flex items-center justify-center text-xs shadow-xs">
+                            <i class="fa-solid fa-check"></i>
+                        </div>
+
+                        <div>
+                            <div class="w-11 h-11 rounded-xl ${isSelected ? 'bg-emerald-700 text-white border-stone-900' : 'bg-white text-terracotta-600 border-stone-300'} border-2 flex items-center justify-center text-lg mb-3 transition-colors">
+                                <i class="fa-solid ${iconClass}"></i>
+                            </div>
+                            <h4 class="font-display font-extrabold text-base text-stone-900 leading-snug pr-7">
+                                ${escapeHtml(comp.name)}
+                            </h4>
+                            <p class="text-xs text-stone-600 mt-1 leading-relaxed">
+                                ${escapeHtml(descText)}
+                            </p>
+                        </div>
+
+                        <div class="mt-3.5 pt-2.5 border-t border-stone-300/60 flex items-center justify-between text-[11px] font-extrabold ${isSelected ? 'text-emerald-800' : 'text-stone-400'}">
+                            <span>${isSelected ? 'PILIHAN KAMU' : 'Klik untuk memilih'}</span>
+                            <i class="fa-solid ${isSelected ? 'fa-circle-check' : 'fa-arrow-pointer'}"></i>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        window.selectCompetitionChoice = function(compId) {
+            selectedCompetitionId = (selectedCompetitionId === compId) ? null : compId;
+            renderStudentCompetitions();
+        };
+
+        function updateSelectedPill() {
+            const pill = document.getElementById('selected-status-pill');
+            const selectedComp = competitionsList.find(c => c.id === selectedCompetitionId);
+            if (selectedComp) {
+                pill.innerHTML = `<i class="fa-solid fa-check mr-1 text-emerald-700"></i> Terpilih: <strong>${escapeHtml(selectedComp.name)}</strong>`;
+                pill.className = 'px-3.5 py-1.5 rounded-full bg-emerald-100 border border-emerald-700/40 text-xs font-bold text-emerald-900';
+            } else {
+                pill.textContent = 'Belum ada lomba dipilih';
+                pill.className = 'px-3.5 py-1.5 rounded-full bg-paper-100 border border-stone-300 text-xs font-extrabold text-stone-600';
+            }
+        }
+
+        // Submit Suara Siswa
+        window.handleVoteSubmit = async function(e) {
+            e.preventDefault();
+            if (!db || !currentUser) {
+                showToast('Menghubungkan ke server cloud, coba sebentar lagi...', 'warning');
+                return;
+            }
+
+            const nameInput = document.getElementById('voter-name');
+            const classInput = document.getElementById('voter-class');
+            const submitBtn = document.getElementById('submit-vote-btn');
+
+            const rawName = nameInput.value.trim();
+            const studentClass = classInput.value;
+
+            if (!rawName) {
+                showToast('Silakan tulis nama lengkap kamu terlebih dahulu.', 'error');
+                nameInput.focus();
+                return;
+            }
+            if (!studentClass) {
+                showToast('Silakan pilih kelas kamu (7A–9K).', 'error');
+                classInput.focus();
+                return;
+            }
+            if (!selectedCompetitionId) {
+                showToast('Silakan pilih 1 cabang lomba terlebih dahulu!', 'error');
+                return;
+            }
+
+            const chosenComp = competitionsList.find(c => c.id === selectedCompetitionId);
+            if (!chosenComp) {
+                showToast('Cabang lomba tidak ditemukan, silakan pilih ulang.', 'error');
+                return;
+            }
+
+            // Validasi ke database agar nama & kelas yang sama tidak voting ganda
+            const normalizedInputName = rawName.toLowerCase().replace(/\s+/g, ' ');
+            const isDuplicate = votesList.some(v =>
+                v.studentClass === studentClass &&
+                (v.studentName || '').toLowerCase().replace(/\s+/g, ' ') === normalizedInputName
+            );
+
+            if (isDuplicate) {
+                showToast(`Nama "${rawName}" dari kelas ${studentClass} sudah tercatat memberikan suara!`, 'error');
+                return;
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>Menyimpan Suara...</span>`;
+
+            try {
+                const now = new Date();
+                const formattedTime = now.toLocaleString('id-ID', {
+                    day: '2-digit', month: 'short', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit'
+                });
+
+                const votePayload = {
+                    studentName: rawName,
+                    studentClass: studentClass,
+                    gradeLevel: studentClass.charAt(0),
+                    competitionId: chosenComp.id,
+                    competitionName: chosenComp.name,
+                    timestamp: Date.now(),
+                    formattedTime: formattedTime
+                };
+
+                const votesRef = collection(db, 'artifacts', appId, 'public', 'data', 'votes');
+                await addDoc(votesRef, votePayload);
+
+                showVoteReceipt(votePayload);
+                triggerCelebration();
+                showToast('Suara kamu resmi tercatat di sistem OSIM!', 'success');
+
+            } catch (err) {
+                console.error("Gagal mengirim suara:", err);
+                showToast('Gagal menyimpan suara. Periksa koneksi internet dan coba lagi.', 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> <span>Kirim Suara Sekarang</span>`;
+            }
+        };
+
+        function showVoteReceipt(voteData) {
+            document.getElementById('voting-form').classList.add('hidden');
+            const receiptCard = document.getElementById('vote-receipt-card');
+            receiptCard.classList.remove('hidden');
+
+            document.getElementById('receipt-name').textContent = voteData.studentName;
+            document.getElementById('receipt-class').textContent = voteData.studentClass;
+            document.getElementById('receipt-time').textContent = voteData.formattedTime;
+            document.getElementById('receipt-choice-box').innerHTML = `
+                <i class="fa-solid fa-trophy text-amber-500"></i>
+                <span>${escapeHtml(voteData.competitionName)}</span>
+            `;
+
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        window.resetStudentFormForNewPerson = function() {
+            document.getElementById('voter-name').value = '';
+            document.getElementById('voter-class').value = '';
+            selectedCompetitionId = null;
+            renderStudentCompetitions();
+
+            document.getElementById('vote-receipt-card').classList.add('hidden');
+            document.getElementById('voting-form').classList.remove('hidden');
+        };
+
+        function triggerCelebration() {
+            if (typeof confetti === 'function') {
+                confetti({
+                    particleCount: 70,
+                    spread: 75,
+                    origin: { y: 0.6 },
+                    colors: ['#059669', '#D95D39', '#F59E0B', '#10B981']
+                });
+            }
+        }
+
+        // =========================================================
+        // NAVIGASI TAB & AUTENTIKASI ADMIN (PASSWORD: 20583788)
+        // =========================================================
+        window.switchTab = function(tabName) {
+            const secVoting = document.getElementById('section-voting');
+            const secAdmin = document.getElementById('section-admin');
+            const navVoting = document.getElementById('nav-voting');
+            const navAdmin = document.getElementById('nav-admin');
+
+            if (tabName === 'voting') {
+                secVoting.classList.remove('hidden');
+                secAdmin.classList.add('hidden');
+
+                navVoting.className = 'flex-1 sm:flex-initial px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 bg-emerald-700 text-white shadow-xs cursor-pointer';
+                navAdmin.className = 'flex-1 sm:flex-initial px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 text-stone-600 hover:text-stone-900 cursor-pointer';
+            } else {
+                secVoting.classList.add('hidden');
+                secAdmin.classList.remove('hidden');
+
+                navAdmin.className = 'flex-1 sm:flex-initial px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 bg-stone-900 text-white shadow-xs cursor-pointer';
+                navVoting.className = 'flex-1 sm:flex-initial px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 text-stone-600 hover:text-stone-900 cursor-pointer';
+
+                updateAdminLockView();
+            }
+        };
+
+        function updateAdminLockView() {
+            const lockScreen = document.getElementById('admin-lock-screen');
+            const dashContent = document.getElementById('admin-dashboard-content');
+            const lockIcon = document.getElementById('admin-lock-icon');
+
+            if (isAdminAuthenticated) {
+                lockScreen.classList.add('hidden');
+                dashContent.classList.remove('hidden');
+                lockIcon.className = 'fa-solid fa-unlock text-xs text-emerald-400';
+                renderAdminDashboard();
+            } else {
+                lockScreen.classList.remove('hidden');
+                dashContent.classList.add('hidden');
+                lockIcon.className = 'fa-solid fa-lock text-xs';
+                setTimeout(() => document.getElementById('admin-password-input').focus(), 100);
+            }
+        }
+
+        window.handleAdminLogin = function(e) {
+            e.preventDefault();
+            const input = document.getElementById('admin-password-input');
+            const errorMsg = document.getElementById('password-error-msg');
+            const enteredPass = input.value.trim();
+
+            // Password tepat: 20583788
+            if (enteredPass === '20583788') {
+                isAdminAuthenticated = true;
+                errorMsg.classList.add('hidden');
+                input.classList.remove('border-rose-500');
+                input.value = '';
+                updateAdminLockView();
+                showToast('Akses diterima. Selamat datang, Panitia OSIM!', 'success');
+            } else {
+                errorMsg.classList.remove('hidden');
+                input.classList.add('border-rose-500');
+                input.focus();
+            }
+        };
+
+        window.logoutAdmin = function() {
+            isAdminAuthenticated = false;
+            updateAdminLockView();
+            showToast('Panel Admin telah dikunci kembali.', 'info');
+        };
+
+        window.togglePasswordVisibility = function() {
+            const input = document.getElementById('admin-password-input');
+            const icon = document.getElementById('eye-icon');
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.className = 'fa-solid fa-eye-slash';
+            } else {
+                input.type = 'password';
+                icon.className = 'fa-solid fa-eye';
+            }
+        };
+
+        // =========================================================
+        // RENDER DASHBOARD ADMIN (GRAFIK, CRUD LOMBA, TABEL & EXCEL)
+        // =========================================================
+        window.setAdminGradeFilter = function(grade) {
+            adminGradeFilter = grade;
+            ['ALL', '7', '8', '9'].forEach(g => {
+                const btn = document.getElementById(`filter-btn-${g}`);
+                if (g === grade) {
+                    btn.className = 'px-2.5 py-1.5 rounded-lg bg-stone-900 text-white transition-all cursor-pointer';
+                } else {
+                    btn.className = 'px-2.5 py-1.5 rounded-lg text-stone-600 hover:text-stone-900 transition-all cursor-pointer';
+                }
+            });
+            renderAdminDashboard();
+        };
+
+        function getFilteredVotes() {
+            if (adminGradeFilter === 'ALL') return votesList;
+            return votesList.filter(v => String(v.gradeLevel) === adminGradeFilter);
+        }
+
+        function getVoteCompetitionId(vote) {
+            if (vote.competitionId) return vote.competitionId;
+            if (Array.isArray(vote.choiceIds) && vote.choiceIds.length > 0) return vote.choiceIds[0];
+            return null;
+        }
+
+        function getVoteCompetitionName(vote) {
+            if (vote.competitionName) return vote.competitionName;
+            if (Array.isArray(vote.choices) && vote.choices.length > 0) return vote.choices[0].name;
+            return '-';
+        }
+
+        function renderAdminDashboard() {
+            if (!isAdminAuthenticated) return;
+
+            const filteredVotes = getFilteredVotes();
+
+            // Hitung perolehan suara per cabang lomba & per kelas
+            const voteCounts = {};
+            competitionsList.forEach(c => {
+                voteCounts[c.id] = { id: c.id, name: c.name, icon: c.icon || 'fa-trophy', count: 0 };
+            });
+
+            const classCounts = {};
+            filteredVotes.forEach(vote => {
+                const cId = getVoteCompetitionId(vote);
+                if (cId && voteCounts[cId]) {
+                    voteCounts[cId].count++;
+                }
+                if (vote.studentClass) {
+                    classCounts[vote.studentClass] = (classCounts[vote.studentClass] || 0) + 1;
+                }
+            });
+
+            const sortedResults = Object.values(voteCounts).sort((a, b) => b.count - a.count);
+
+            // Kelas paling aktif
+            const sortedClasses = Object.entries(classCounts).sort((a, b) => b[1] - a[1]);
+
+            // Update 4 Kartu Statistik Atas
+            document.getElementById('stat-total-voters').textContent = filteredVotes.length;
+            document.getElementById('stat-total-comps').textContent = competitionsList.length;
+
+            if (sortedClasses.length > 0) {
+                document.getElementById('stat-top-class').textContent = sortedClasses[0][0];
+                document.getElementById('stat-top-class-count').textContent = `${sortedClasses[0][1]} pemilih`;
+            } else {
+                document.getElementById('stat-top-class').textContent = '-';
+                document.getElementById('stat-top-class-count').textContent = '0 pemilih';
+            }
+
+            if (sortedResults.length > 0 && sortedResults[0].count > 0) {
+                const topPct = filteredVotes.length > 0 ? ((sortedResults[0].count / filteredVotes.length) * 100).toFixed(1) : '0.0';
+                document.getElementById('stat-top-comp').textContent = sortedResults[0].name;
+                document.getElementById('stat-top-comp-votes').textContent = `${sortedResults[0].count} suara (${topPct}%)`;
+            } else {
+                document.getElementById('stat-top-comp').textContent = 'Belum ada';
+                document.getElementById('stat-top-comp-votes').textContent = '0 suara (0%)';
+            }
+
+            // Render Grafik Batang Hasil Voting
+            const barsContainer = document.getElementById('admin-results-bars');
+            if (sortedResults.length === 0) {
+                barsContainer.innerHTML = `<p class="text-sm text-stone-400 text-center py-8">Belum ada data cabang lomba.</p>`;
+            } else {
+                const maxCount = Math.max(...sortedResults.map(r => r.count), 1);
+                barsContainer.innerHTML = sortedResults.map((item, idx) => {
+                    const pctOfTotal = filteredVotes.length > 0 ? ((item.count / filteredVotes.length) * 100).toFixed(1) : '0.0';
+                    const barWidth = item.count > 0 ? Math.max((item.count / maxCount) * 100, 4) : 0;
+                    const isFirst = idx === 0 && item.count > 0;
+
+                    return `
+                        <div>
+                            <div class="flex items-center justify-between text-sm mb-1.5">
+                                <div class="flex items-center gap-2 font-bold text-stone-800">
+                                    <span class="w-6 h-6 rounded-lg ${isFirst ? 'bg-amber-100 text-amber-800 border border-amber-400' : 'bg-paper-100 text-stone-600 border border-stone-300'} text-xs flex items-center justify-center font-extrabold">
+                                        ${isFirst ? '<i class="fa-solid fa-crown"></i>' : idx + 1}
+                                    </span>
+                                    <i class="fa-solid ${item.icon} text-terracotta-600 text-xs"></i>
+                                    <span>${escapeHtml(item.name)}</span>
+                                </div>
+                                <div class="text-right">
+                                    <span class="font-display font-black text-stone-900">${item.count}</span>
+                                    <span class="text-xs text-stone-500 ml-1 font-semibold">suara (${pctOfTotal}%)</span>
+                                </div>
+                            </div>
+                            <div class="w-full h-3.5 bg-paper-100 rounded-full overflow-hidden border border-stone-300/80">
+                                <div class="h-full rounded-full transition-all duration-500 ${isFirst ? 'bg-gradient-to-r from-terracotta-500 to-emerald-600' : 'bg-emerald-600'}"
+                                     style="width: ${barWidth}%"></div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            // Render Daftar Lomba Aktif (CRUD Hapus)
+            const adminCompList = document.getElementById('admin-competitions-list');
+            adminCompList.innerHTML = competitionsList.map(comp => `
+                <div class="flex items-center justify-between p-3 rounded-xl bg-paper-50 border border-stone-300/80 hover:border-stone-900 transition-all">
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <div class="w-8 h-8 rounded-lg bg-white border border-stone-300 text-terracotta-600 flex items-center justify-center text-xs shrink-0">
+                            <i class="fa-solid ${comp.icon || 'fa-trophy'}"></i>
+                        </div>
+                        <div class="truncate">
+                            <p class="text-sm font-extrabold text-stone-900 truncate">${escapeHtml(comp.name)}</p>
+                            <p class="text-[11px] text-stone-500 truncate">${escapeHtml(comp.desc || '')}</p>
+                        </div>
+                    </div>
+                    <button onclick="confirmDeleteCompetition('${comp.id}', '${escapeHtml(comp.name)}')"
+                            title="Hapus Lomba"
+                            class="ml-2 w-8 h-8 rounded-lg bg-white hover:bg-rose-50 text-stone-400 hover:text-rose-600 border border-stone-300 flex items-center justify-center transition-colors shrink-0 cursor-pointer">
+                        <i class="fa-solid fa-trash text-xs"></i>
+                    </button>
+                </div>
+            `).join('');
+
+            // Render Tabel Riwayat Pemilih
+            renderVoterTable();
+        }
+
+        // Tambah Cabang Lomba Baru
+        window.handleAddCompetition = async function(e) {
+            e.preventDefault();
+            if (!db || !currentUser) return;
+
+            const nameInput = document.getElementById('new-comp-name');
+            const iconInput = document.getElementById('new-comp-icon');
+            const descInput = document.getElementById('new-comp-desc');
+
+            const name = nameInput.value.trim();
+            if (!name) return;
+
+            try {
+                const compsRef = collection(db, 'artifacts', appId, 'public', 'data', 'competitions');
+                await addDoc(compsRef, {
+                    name: name,
+                    icon: iconInput.value,
+                    desc: descInput.value.trim() || 'Cabang lomba Class Meeting OSIM',
+                    order: competitionsList.length + 1,
+                    createdAt: Date.now()
+                });
+
+                nameInput.value = '';
+                descInput.value = '';
+                showToast(`Lomba "${name}" ditambahkan & langsung tampil di halaman siswa!`, 'success');
+            } catch (err) {
+                console.error("Gagal tambah lomba:", err);
+                showToast('Gagal menambahkan cabang lomba.', 'error');
+            }
+        };
+
+        // Hapus Cabang Lomba
+        window.confirmDeleteCompetition = function(compId, compName) {
+            openConfirmModal(
+                'Hapus Cabang Lomba?',
+                `Lomba "${compName}" akan dihapus dari halaman Voting Siswa secara real-time.`,
+                async () => {
+                    if (!db || !currentUser) return;
+                    try {
+                        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'competitions', compId);
+                        await deleteDoc(docRef);
+                        showToast(`Lomba "${compName}" berhasil dihapus.`, 'info');
+                    } catch (err) {
+                        console.error("Gagal hapus lomba:", err);
+                        showToast('Gagal menghapus cabang lomba.', 'error');
+                    }
+                }
+            );
+        };
+
+        // Render Tabel Riwayat Pemilih Masuk
+        window.renderVoterTable = function() {
+            const tbody = document.getElementById('admin-voters-tbody');
+            const searchQuery = (document.getElementById('search-voter-input')?.value || '').toLowerCase().trim();
+            const baseList = getFilteredVotes();
+
+            const displayedList = searchQuery
+                ? baseList.filter(v =>
+                    (v.studentName || '').toLowerCase().includes(searchQuery) ||
+                    (v.studentClass || '').toLowerCase().includes(searchQuery) ||
+                    getVoteCompetitionName(v).toLowerCase().includes(searchQuery)
+                )
+                : baseList;
+
+            if (displayedList.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="py-10 text-center text-stone-400 text-sm">
+                            <i class="fa-solid fa-inbox text-2xl mb-2 block text-stone-300"></i>
+                            Belum ada data suara masuk yang sesuai pencarian.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = displayedList.map((vote, index) => {
+                const compName = getVoteCompetitionName(vote);
+                return `
+                    <tr class="hover:bg-paper-50 transition-colors">
+                        <td class="py-3 px-4 text-stone-500 font-semibold">${index + 1}</td>
+                        <td class="py-3 px-4 text-xs text-stone-500 whitespace-nowrap">${escapeHtml(vote.formattedTime || '-')}</td>
+                        <td class="py-3 px-4 font-bold text-stone-900">${escapeHtml(vote.studentName)}</td>
+                        <td class="py-3 px-4">
+                            <span class="px-2.5 py-1 rounded-lg bg-paper-100 border border-stone-300 text-stone-800 font-extrabold text-xs">
+                                ${escapeHtml(vote.studentClass)}
+                            </span>
+                        </td>
+                        <td class="py-3 px-4">
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-900 border border-emerald-300 text-xs font-bold">
+                                <i class="fa-solid fa-trophy text-emerald-600 text-[10px]"></i>
+                                ${escapeHtml(compName)}
+                            </span>
+                        </td>
+                        <td class="py-3 px-4 text-center">
+                            <button onclick="confirmDeleteSingleVote('${vote.id}', '${escapeHtml(vote.studentName)}')"
+                                    title="Hapus Suara Ini"
+                                    class="p-1.5 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer">
+                                <i class="fa-solid fa-trash-can text-xs"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        };
+
+        window.confirmDeleteSingleVote = function(voteId, studentName) {
+            openConfirmModal(
+                'Hapus Data Suara?',
+                `Hapus suara milik "${studentName}" dari rekapitulasi? Siswa tersebut dapat memilih ulang setelah dihapus.`,
+                async () => {
+                    if (!db || !currentUser) return;
+                    try {
+                        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'votes', voteId));
+                        showToast(`Suara milik ${studentName} telah dihapus.`, 'info');
+                    } catch (err) {
+                        showToast('Gagal menghapus data suara.', 'error');
+                    }
+                }
+            );
+        };
+
+        window.confirmResetAllVotes = function() {
+            if (votesList.length === 0) {
+                showToast('Data suara sudah kosong.', 'info');
+                return;
+            }
+            openConfirmModal(
+                'Reset Seluruh Voting?',
+                `Tindakan ini akan menghapus SEMUA (${votesList.length}) suara masuk secara permanen. Unduh file Excel terlebih dahulu jika perlu menyimpan arsip.`,
+                async () => {
+                    if (!db || !currentUser) return;
+                    try {
+                        const batch = writeBatch(db);
+                        votesList.forEach(v => {
+                            const ref = doc(db, 'artifacts', appId, 'public', 'data', 'votes', v.id);
+                            batch.delete(ref);
+                        });
+                        await batch.commit();
+                        showToast('Seluruh data suara berhasil direset.', 'success');
+                    } catch (err) {
+                        console.error(err);
+                        showToast('Gagal mereset data suara.', 'error');
+                    }
+                }
+            );
+        };
+
+        // =========================================================
+        // EKSPOR EXCEL (.XLSX) DENGAN 2 SHEET SESUAI KETENTUAN OSIM
+        // =========================================================
+        window.exportToExcel = function() {
+            if (typeof XLSX === 'undefined') {
+                showToast('Library Excel sedang dimuat, coba sebentar lagi.', 'warning');
+                return;
+            }
+
+            const totalVoters = votesList.length;
+
+            // Sheet 1: 'Rekap Perolehan Suara' (Peringkat, Nama Lomba, Jumlah Suara, Persentase)
+            const summaryRows = competitionsList.map((comp) => {
+                let count = 0;
+                votesList.forEach(v => {
+                    if (getVoteCompetitionId(v) === comp.id) count++;
+                });
+                const pct = totalVoters > 0 ? ((count / totalVoters) * 100).toFixed(1) + '%' : '0%';
+                return {
+                    'Peringkat': 0,
+                    'Nama Lomba': comp.name,
+                    'Jumlah Suara': count,
+                    'Persentase': pct
+                };
+            }).sort((a, b) => b['Jumlah Suara'] - a['Jumlah Suara']);
+
+            summaryRows.forEach((row, idx) => {
+                row['Peringkat'] = idx + 1;
+            });
+
+            // Sheet 2: 'Data Pemilih Siswa' (No, Waktu Voting, Nama Lengkap, Kelas, Pilihan Lomba)
+            const detailRows = votesList.map((v, idx) => ({
+                'No': idx + 1,
+                'Waktu Voting': v.formattedTime || '-',
+                'Nama Lengkap': v.studentName,
+                'Kelas': v.studentClass,
+                'Pilihan Lomba': getVoteCompetitionName(v)
+            }));
+
+            const wb = XLSX.utils.book_new();
+            const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
+            const wsDetail = XLSX.utils.json_to_sheet(detailRows.length > 0 ? detailRows : [{ 'Info': 'Belum ada data pemilih masuk' }]);
+
+            wsSummary['!cols'] = [{ wch: 12 }, { wch: 28 }, { wch: 16 }, { wch: 15 }];
+            wsDetail['!cols'] = [{ wch: 6 }, { wch: 22 }, { wch: 30 }, { wch: 10 }, { wch: 26 }];
+
+            XLSX.utils.book_append_sheet(wb, wsSummary, 'Rekap Perolehan Suara');
+            XLSX.utils.book_append_sheet(wb, wsDetail, 'Data Pemilih Siswa');
+
+            const dateStamp = new Date().toISOString().slice(0, 10);
+            XLSX.writeFile(wb, `ClassMeet_Voting_OSIM_${dateStamp}.xlsx`);
+            showToast('File Excel (.xlsx) berhasil diunduh!', 'success');
+        };
+
+        // =========================================================
+        // UTILITAS UI (TOAST & MODAL KONFIRMASI)
+        // =========================================================
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+
+            const styles = {
+                success: 'bg-emerald-900 text-white border-stone-900',
+                error: 'bg-rose-600 text-white border-stone-900',
+                warning: 'bg-amber-400 text-stone-950 border-stone-900',
+                info: 'bg-stone-900 text-white border-stone-700'
+            };
+
+            const icons = {
+                success: 'fa-circle-check text-emerald-300',
+                error: 'fa-circle-exclamation text-rose-200',
+                warning: 'fa-triangle-exclamation text-stone-900',
+                info: 'fa-circle-info text-amber-300'
+            };
+
+            toast.className = `pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-2xl border-2 shadow-[4px_4px_0px_#1C1917] text-sm font-bold animate-panel ${styles[type] || styles.info}`;
+            toast.innerHTML = `
+                <i class="fa-solid ${icons[type] || icons.info} text-base"></i>
+                <span class="flex-1">${escapeHtml(message)}</span>
+            `;
+
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(8px)';
+                toast.style.transition = 'all 0.25s ease';
+                setTimeout(() => toast.remove(), 260);
+            }, 3400);
+        }
+
+        let pendingConfirmAction = null;
+        function openConfirmModal(title, desc, onConfirm) {
+            document.getElementById('confirm-modal-title').textContent = title;
+            document.getElementById('confirm-modal-desc').textContent = desc;
+            pendingConfirmAction = onConfirm;
+            document.getElementById('custom-confirm-modal').classList.remove('hidden');
+        }
+
+        window.closeConfirmModal = function() {
+            document.getElementById('custom-confirm-modal').classList.add('hidden');
+            pendingConfirmAction = null;
+        };
+
+        document.getElementById('confirm-modal-yes-btn').addEventListener('click', async () => {
+            if (typeof pendingConfirmAction === 'function') {
+                await pendingConfirmAction();
+            }
+            closeConfirmModal();
+        });
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        // Jalankan aplikasi saat halaman siap
+        window.addEventListener('DOMContentLoaded', () => {
+            initFirebase();
+        });
+    </script>
+</body>
+</html>
